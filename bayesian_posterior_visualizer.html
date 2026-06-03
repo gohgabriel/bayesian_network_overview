@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bayesian Posterior Visualizer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f9f8f5;
+      --surface: #ffffff;
+      --surface-2: #f1efe8;
+      --border: rgba(0,0,0,0.1);
+      --text: #1a1a18;
+      --text-muted: #6b6a66;
+      --blue: #378ADD;
+      --blue-bg: #e6f1fb;
+      --blue-text: #0c447c;
+      --red: #E24B4A;
+      --red-bg: rgba(226,75,74,0.12);
+      --red-text: #7c1212;
+      --green: #1D9E75;
+      --green-bg: #e1f5ee;
+      --green-text: #085041;
+      --purple: #8B5CF6;
+      --purple-bg: rgba(139,92,246,0.12);
+      --purple-text: #4c1d95;
+      --amber: #D97706;
+      --amber-bg: rgba(217,119,6,0.12);
+      --amber-text: #78350f;
+      --radius: 10px;
+      --radius-sm: 6px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #181816;
+        --surface: #222220;
+        --surface-2: #2c2c2a;
+        --border: rgba(255,255,255,0.1);
+        --text: #f0ede6;
+        --text-muted: #9e9c96;
+        --blue-bg: rgba(55,138,221,0.15);
+        --blue-text: #85b7eb;
+        --red-bg: rgba(226,75,74,0.15);
+        --red-text: #f08080;
+        --green-bg: rgba(29,158,117,0.15);
+        --green-text: #5dcaa5;
+        --purple-bg: rgba(139,92,246,0.15);
+        --purple-text: #c4b5fd;
+        --amber-bg: rgba(217,119,6,0.15);
+        --amber-text: #fbbf24;
+      }
+    }
+
+    body {
+      font-family: 'Georgia', serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      width: 100%;
+      max-width: 700px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: normal;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 1.75rem;
+      font-family: sans-serif;
+    }
+
+    .section-label {
+      font-size: 0.7rem;
+      font-family: sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.6rem;
+    }
+
+    .controls { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+
+    .ctrl { display: flex; align-items: center; gap: 12px; }
+    .ctrl label { font-family: sans-serif; font-size: 13px; color: var(--text-muted); min-width: 105px; }
+    .ctrl input[type=range] { flex: 1; cursor: pointer; }
+    .ctrl input[type=range].prior-slider  { accent-color: var(--red); }
+    .ctrl input[type=range].data-slider   { accent-color: var(--blue); }
+    .ctrl .val { font-family: sans-serif; font-size: 13px; font-weight: 600; min-width: 36px; text-align: right; color: var(--text); }
+
+    .ctrl-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 0.25rem 0;
+    }
+
+    .toggle-row { display: flex; gap: 6px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .tog {
+      flex: 1; min-width: 120px; padding: 7px 10px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: transparent; cursor: pointer;
+      font-family: sans-serif; font-size: 12px; color: var(--text-muted);
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .tog:hover { background: var(--surface-2); }
+    .tog.active-blue   { background: var(--blue-bg);   color: var(--blue-text);   border-color: transparent; font-weight: 600; }
+    .tog.active-green  { background: var(--green-bg);  color: var(--green-text);  border-color: transparent; font-weight: 600; }
+    .tog.active-purple { background: var(--purple-bg); color: var(--purple-text); border-color: transparent; font-weight: 600; }
+    .tog.active-amber  { background: var(--amber-bg);  color: var(--amber-text);  border-color: transparent; font-weight: 600; }
+
+    .stats { display: flex; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .stat { flex: 1; min-width: 120px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 0.75rem 1rem; }
+    .stat-label { font-family: sans-serif; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { font-size: 1.15rem; font-weight: normal; color: var(--text); letter-spacing: -0.02em; }
+    .stat-value.small { font-size: 0.9rem; }
+
+    .legend { display: flex; gap: 16px; font-family: sans-serif; font-size: 12px; color: var(--text-muted); margin-bottom: 0.5rem; flex-wrap: wrap; }
+    .legend span { display: flex; align-items: center; gap: 5px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    .chart-wrap { position: relative; width: 100%; height: 280px; }
+    canvas { width: 100% !important; }
+
+    .formula-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: 'Georgia', serif;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+      padding: 0.6rem 1rem;
+      background: var(--surface-2);
+      border-radius: var(--radius-sm);
+    }
+    .formula-row .f-post  { color: var(--green);  font-weight: 600; }
+    .formula-row .f-like  { color: var(--blue);   font-weight: 600; }
+    .formula-row .f-prior { color: var(--red);    font-weight: 600; }
+    .formula-row .f-op    { color: var(--text-muted); }
+
+    .footer {
+      margin-top: 1.5rem; padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-family: sans-serif; font-size: 11px; color: var(--text-muted); line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Bayesian Posterior Visualizer</h1>
+  <p class="subtitle">The posterior combines your prior belief with the likelihood of the data.</p>
+
+  <div class="formula-row">
+    <span class="f-post">p(θ | data)</span>
+    <span class="f-op">∝</span>
+    <span class="f-like">p(data | θ)</span>
+    <span class="f-op">×</span>
+    <span class="f-prior">p(θ)</span>
+  </div>
+  <div class="formula-row" style="font-size:0.78rem; padding: 0.4rem 1rem; margin-top: -1rem;">
+    <span style="color:var(--green)">posterior</span>
+    <span style="color:var(--text-muted)">∝</span>
+    <span style="color:var(--blue)">likelihood (from data)</span>
+    <span style="color:var(--text-muted)">×</span>
+    <span style="color:var(--red)">prior (your belief)</span>
+  </div>
+
+  <div class="section-label">Prior (your belief before data)</div>
+  <div class="controls" id="prior-controls">
+    <div class="ctrl">
+      <label>Prior mean θ₀</label>
+      <input type="range" class="prior-slider" min="-5" max="5" step="0.1" value="0" id="prior-mu">
+      <span class="val" id="prior-mu-out">0</span>
+    </div>
+    <div class="ctrl">
+      <label>Prior std σ₀</label>
+      <input type="range" class="prior-slider" min="0.3" max="20" step="0.1" value="2" id="prior-sigma">
+      <span class="val" id="prior-sigma-out">2.0</span>
+    </div>
+  </div>
+
+  <div class="section-label">Data (observed)</div>
+  <div class="controls" id="data-controls">
+    <div class="ctrl">
+      <label>Observed θ̂</label>
+      <input type="range" class="data-slider" min="-5" max="5" step="0.1" value="2" id="data-mean">
+      <span class="val" id="data-mean-out">2.0</span>
+    </div>
+    <div class="ctrl">
+      <label>Std error (σ/√n)</label>
+      <input type="range" class="data-slider" min="0.3" max="3" step="0.1" value="1" id="data-se">
+      <span class="val" id="data-se-out">1.0</span>
+    </div>
+  </div>
+
+  <div class="section-label">Display</div>
+  <div class="toggle-row">
+    <button class="tog active-red"    id="btn-prior"    onclick="toggleLayer('prior')">show prior</button>
+    <button class="tog active-blue"   id="btn-like"     onclick="toggleLayer('like')">show likelihood</button>
+    <button class="tog active-green"  id="btn-hdi"      onclick="toggleHDI()">show 95% HDI</button>
+    <button class="tog active-purple" id="btn-point"    onclick="cyclePoint()">MAP estimate</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Posterior mean E[θ]</div>
+      <div class="stat-value" id="post-mean">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Posterior std</div>
+      <div class="stat-value" id="post-std">—</div>
+    </div>
+    <div class="stat" id="hdi-stat">
+      <div class="stat-label">95% HDI</div>
+      <div class="stat-value small" id="hdi-val">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Prior weight</div>
+      <div class="stat-value" id="prior-weight">—</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span id="leg-prior"><span class="dot" style="background:#E24B4A;"></span>Prior</span>
+    <span id="leg-like"><span class="dot" style="background:#378ADD;"></span>Likelihood</span>
+    <span><span class="dot" style="background:#1D9E75;"></span>Posterior</span>
+    <span id="leg-hdi" style="display:none;"><span class="dot" style="background:#8B5CF6;"></span>95% HDI</span>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="chart" role="img" aria-label="Bayesian prior, likelihood, and posterior distributions"></canvas>
+  </div>
+
+  <div class="footer">
+    With a <strong>normal prior</strong> N(θ₀, σ₀²) and <strong>normal likelihood</strong> N(θ̂, σ²), the posterior is also normal. The posterior mean is a precision-weighted average of the prior mean and data mean — the sharper (more certain) distribution pulls the posterior toward it. The 95% HDI is the shortest interval containing 95% of the posterior probability.
+  </div>
+</div>
+
+<script>
+// ── Math helpers ──────────────────────────────────────────────────────────────
+function normalPDF(x, mu, sigma) {
+  return Math.exp(-0.5*((x-mu)/sigma)**2) / (sigma*Math.sqrt(2*Math.PI));
+}
+function erf(x) {
+  const sign = x >= 0 ? 1 : -1; x = Math.abs(x);
+  const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+  const t = 1/(1+p*x);
+  return sign*(1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x));
+}
+function normalCDF(x, mu, sigma) { return 0.5*(1+erf((x-mu)/(sigma*Math.sqrt(2)))); }
+function fmt(v) { return Math.abs(v-Math.round(v)) < 0.001 ? Math.round(v).toString() : v.toFixed(2); }
+
+// Inverse normal CDF (for HDI) via rational approximation
+function normalQuantile(p, mu, sigma) {
+  // Beasley-Springer-Moro approximation
+  const a = [0,-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239e+00];
+  const b = [0,-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,6.680131188771972e+01,-1.328068155288572e+01];
+  const c = [-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,-2.549732539343734e+00,4.374664141464968e+00,2.938163982698783e+00];
+  const d = [7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];
+  const pLow = 0.02425, pHigh = 1 - pLow;
+  let q, r;
+  if (p < pLow) {
+    q = Math.sqrt(-2*Math.log(p));
+    q = (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+        ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  } else if (p <= pHigh) {
+    q = p - 0.5; r = q*q;
+    q = (((((a[1]*r+a[2])*r+a[3])*r+a[4])*r+a[5])*r+a[6])*q /
+        (((((b[1]*r+b[2])*r+b[3])*r+b[4])*r+b[5])*r+1);
+  } else {
+    q = Math.sqrt(-2*Math.log(1-p));
+    q = -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+         ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+  return mu + sigma * q;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let priorMu = 0, priorSigma = 2;
+let dataMean = 2, dataSE = 1;
+let showPrior = true, showLike = true, showHDI = true;
+// pointMode: 'map' | 'mean' | 'none'
+let pointMode = 'map';
+
+// ── Posterior computation (conjugate normal-normal) ──────────────────────────
+function posterior() {
+  const precPrior = 1 / (priorSigma * priorSigma);
+  const precLike  = 1 / (dataSE * dataSE);
+  const precPost  = precPrior + precLike;
+  const postSigma = Math.sqrt(1 / precPost);
+  const postMu    = (precPrior * priorMu + precLike * dataMean) / precPost;
+  const priorW    = precPrior / precPost; // weight on prior
+  return { postMu, postSigma, priorW };
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const X_MIN = -10, X_MAX = 10;
+const STEPS = 500;
+
+const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+const COL = {
+  red:        '#E24B4A',
+  redFill:    isDark ? 'rgba(226,75,74,0.25)'   : 'rgba(226,75,74,0.15)',
+  blue:       '#378ADD',
+  blueFill:   isDark ? 'rgba(55,138,221,0.22)'  : 'rgba(55,138,221,0.12)',
+  green:      '#1D9E75',
+  greenFill:  isDark ? 'rgba(29,158,117,0.45)'  : 'rgba(29,158,117,0.25)',
+  purple:     '#8B5CF6',
+  purpleFill: isDark ? 'rgba(139,92,246,0.35)'  : 'rgba(139,92,246,0.2)',
+  amber:      '#D97706',
+  grid:       isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+  axis:       isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)',
+  tick:       isDark ? '#9e9c96' : '#6b6a66',
+  pillBg:     isDark ? 'rgba(34,34,32,0.95)'    : 'rgba(255,255,255,0.95)',
+};
+
+// ── Canvas setup ──────────────────────────────────────────────────────────────
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+const PAD = { top: 36, right: 16, bottom: 36, left: 16 };
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width  = rect.width  + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.scale(dpr, dpr);
+  draw();
+}
+
+function cw() { return canvas.width  / (window.devicePixelRatio||1); }
+function ch() { return canvas.height / (window.devicePixelRatio||1); }
+function plotW() { return cw() - PAD.left - PAD.right; }
+function plotH() { return ch() - PAD.top  - PAD.bottom; }
+function xToP(x) { return PAD.left + (x - X_MIN) / (X_MAX - X_MIN) * plotW(); }
+function yToP(y, yMax) { return PAD.top + (1 - y / yMax) * plotH(); }
+
+// ── Draw ──────────────────────────────────────────────────────────────────────
+function draw() {
+  const W = cw(), H = ch(), PW = plotW(), PH = plotH();
+  const { postMu, postSigma } = posterior();
+
+  // Compute yMax across all visible curves
+  const peaks = [normalPDF(postMu, postMu, postSigma)];
+  if (showPrior) peaks.push(normalPDF(priorMu, priorMu, priorSigma));
+  if (showLike)  peaks.push(normalPDF(dataMean, dataMean, dataSE));
+  const yMax = Math.max(...peaks) * 1.25;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid lines
+  ctx.save();
+  ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
+  for (let v = X_MIN; v <= X_MAX; v += 2) {
+    const xp = xToP(v);
+    ctx.beginPath(); ctx.moveTo(xp, PAD.top); ctx.lineTo(xp, PAD.top+PH); ctx.stroke();
+  }
+  ctx.restore();
+
+  // X axis
+  const axisY = PAD.top + PH;
+  ctx.save();
+  ctx.strokeStyle = COL.axis; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD.left, axisY); ctx.lineTo(PAD.left+PW, axisY); ctx.stroke();
+  ctx.restore();
+
+  // Tick labels
+  ctx.save();
+  ctx.font = '11px sans-serif'; ctx.fillStyle = COL.tick;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let v = X_MIN; v <= X_MAX; v += 2) ctx.fillText(v, xToP(v), axisY + 4);
+  ctx.font = 'italic 12px Georgia, serif';
+  ctx.fillText('θ', PAD.left + PW/2, axisY + 18);
+  ctx.restore();
+
+  // ── Helper: draw a filled+stroked curve ──
+  function drawCurve(mu, sigma, fillColor, strokeColor, strokeW) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(xToP(X_MIN), yToP(0, yMax));
+    for (let i = 0; i <= STEPS; i++) {
+      const x = X_MIN + (X_MAX-X_MIN)*i/STEPS;
+      ctx.lineTo(xToP(x), yToP(normalPDF(x, mu, sigma), yMax));
+    }
+    ctx.lineTo(xToP(X_MAX), yToP(0, yMax));
+    ctx.closePath();
+    ctx.fillStyle = fillColor; ctx.fill();
+    // stroke
+    ctx.beginPath();
+    for (let i = 0; i <= STEPS; i++) {
+      const x = X_MIN + (X_MAX-X_MIN)*i/STEPS;
+      const yp = yToP(normalPDF(x, mu, sigma), yMax);
+      i === 0 ? ctx.moveTo(xToP(x), yp) : ctx.lineTo(xToP(x), yp);
+    }
+    ctx.strokeStyle = strokeColor; ctx.lineWidth = strokeW;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Prior (behind)
+  if (showPrior) drawCurve(priorMu, priorSigma, COL.redFill, COL.red, 1.5);
+
+  // Likelihood (behind)
+  if (showLike) drawCurve(dataMean, dataSE, COL.blueFill, COL.blue, 1.5);
+
+  // HDI shading (under posterior)
+  if (showHDI) {
+    const hdiLo = normalQuantile(0.025, postMu, postSigma);
+    const hdiHi = normalQuantile(0.975, postMu, postSigma);
+    ctx.save();
+    ctx.beginPath();
+    const lo = Math.max(X_MIN, hdiLo), hi = Math.min(X_MAX, hdiHi);
+    const steps = Math.ceil(STEPS*(hi-lo)/(X_MAX-X_MIN));
+    ctx.moveTo(xToP(lo), yToP(0, yMax));
+    for (let i = 0; i <= steps; i++) {
+      const x = lo + (hi-lo)*i/steps;
+      ctx.lineTo(xToP(x), yToP(normalPDF(x, postMu, postSigma), yMax));
+    }
+    ctx.lineTo(xToP(hi), yToP(0, yMax));
+    ctx.closePath();
+    ctx.fillStyle = COL.purpleFill; ctx.fill();
+    ctx.restore();
+  }
+
+  // Posterior (always on top)
+  drawCurve(postMu, postSigma, 'transparent', COL.green, 2.5);
+
+  // ── Vertical lines with pill labels ──
+  function vline(val, dash, color, label, slot) {
+    const xp = xToP(val);
+    if (xp < PAD.left - 1 || xp > PAD.left + PW + 1) return;
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(xp, PAD.top); ctx.lineTo(xp, PAD.top+PH);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = '11px sans-serif';
+    const tw = ctx.measureText(label).width;
+    const px = 5, bh = 18, bw = tw + px*2;
+    // stagger: slot 0 = top, slot 1 = lower
+    const lyBase = PAD.top - bh - 4;
+    const ly = lyBase - (slot||0) * 22;
+    let lx = xp - bw/2;
+    lx = Math.max(PAD.left, Math.min(PAD.left+PW-bw, lx));
+    ctx.fillStyle = COL.pillBg; ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(lx, Math.max(2, ly), bw, bh, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, lx+px, Math.max(2, ly)+bh/2);
+    ctx.restore();
+  }
+
+  if (showHDI) {
+    const hdiLo = normalQuantile(0.025, postMu, postSigma);
+    const hdiHi = normalQuantile(0.975, postMu, postSigma);
+    vline(hdiLo, [4,3], COL.purple, 'HDI '+hdiLo.toFixed(2), 0);
+    vline(hdiHi, [4,3], COL.purple, 'HDI '+hdiHi.toFixed(2), 0);
+  }
+
+  if (pointMode === 'map' || pointMode === 'mean') {
+    // For a symmetric normal, MAP = mean = median
+    vline(postMu, [], COL.green, (pointMode === 'map' ? 'MAP' : 'E[θ]') + ' = ' + postMu.toFixed(2), 1);
+  }
+}
+
+// ── Stats update ──────────────────────────────────────────────────────────────
+function update() {
+  const { postMu, postSigma, priorW } = posterior();
+  draw();
+  const hdiLo = normalQuantile(0.025, postMu, postSigma);
+  const hdiHi = normalQuantile(0.975, postMu, postSigma);
+  document.getElementById('post-mean').textContent  = postMu.toFixed(3);
+  document.getElementById('post-std').textContent   = postSigma.toFixed(3);
+  document.getElementById('hdi-val').textContent    = '['+hdiLo.toFixed(2)+', '+hdiHi.toFixed(2)+']';
+  document.getElementById('prior-weight').textContent = (priorW*100).toFixed(1)+'%';
+}
+
+// ── Toggle helpers ────────────────────────────────────────────────────────────
+function toggleLayer(which) {
+  if (which === 'prior') {
+    showPrior = !showPrior;
+    const btn = document.getElementById('btn-prior');
+    btn.textContent = showPrior ? 'show prior' : 'hide prior';
+    btn.className = 'tog' + (showPrior ? ' active-red' : '');
+    document.getElementById('leg-prior').style.display = showPrior ? '' : 'none';
+  } else {
+    showLike = !showLike;
+    const btn = document.getElementById('btn-like');
+    btn.textContent = showLike ? 'show likelihood' : 'hide likelihood';
+    btn.className = 'tog' + (showLike ? ' active-blue' : '');
+    document.getElementById('leg-like').style.display = showLike ? '' : 'none';
+  }
+  update();
+}
+
+function toggleHDI() {
+  showHDI = !showHDI;
+  const btn = document.getElementById('btn-hdi');
+  btn.textContent = showHDI ? 'show 95% HDI' : 'hide 95% HDI';
+  btn.className = 'tog' + (showHDI ? ' active-green' : '');
+  document.getElementById('leg-hdi').style.display = showHDI ? '' : 'none';
+  update();
+}
+
+function cyclePoint() {
+  const cycle = ['map', 'mean', 'none'];
+  const labels = { map: 'MAP estimate', mean: 'posterior mean', none: 'point estimate' };
+  const colors = { map: 'active-purple', mean: 'active-amber', none: '' };
+  pointMode = cycle[(cycle.indexOf(pointMode)+1) % cycle.length];
+  const btn = document.getElementById('btn-point');
+  btn.textContent = labels[pointMode];
+  btn.className = 'tog' + (colors[pointMode] ? ' '+colors[pointMode] : '');
+  update();
+}
+
+// ── Initial button classes ────────────────────────────────────────────────────
+document.getElementById('btn-prior').className  = 'tog active-red';
+document.getElementById('btn-like').className   = 'tog active-blue';
+document.getElementById('btn-hdi').className    = 'tog active-green';
+document.getElementById('btn-point').className  = 'tog active-purple';
+
+// ── Sliders ───────────────────────────────────────────────────────────────────
+document.getElementById('prior-mu').addEventListener('input', e => {
+  priorMu = parseFloat(e.target.value);
+  document.getElementById('prior-mu-out').textContent = fmt(priorMu);
+  update();
+});
+document.getElementById('prior-sigma').addEventListener('input', e => {
+  priorSigma = parseFloat(e.target.value);
+  document.getElementById('prior-sigma-out').textContent = fmt(priorSigma);
+  update();
+});
+document.getElementById('data-mean').addEventListener('input', e => {
+  dataMean = parseFloat(e.target.value);
+  document.getElementById('data-mean-out').textContent = fmt(dataMean);
+  update();
+});
+document.getElementById('data-se').addEventListener('input', e => {
+  dataSE = parseFloat(e.target.value);
+  document.getElementById('data-se-out').textContent = fmt(dataSE);
+  update();
+});
+
+window.addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
